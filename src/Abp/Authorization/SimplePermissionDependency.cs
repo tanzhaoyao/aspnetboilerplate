@@ -23,7 +23,7 @@ namespace Abp.Authorization
         /// <summary>
         /// Initializes a new instance of the <see cref="SimplePermissionDependency"/> class.
         /// </summary>
-        /// <param name="permissions">The features.</param>
+        /// <param name="permissions">The permissions.</param>
         public SimplePermissionDependency(params string[] permissions)
         {
             Permissions = permissions;
@@ -36,9 +36,9 @@ namespace Abp.Authorization
         /// If this is set to true, all of the <see cref="Permissions"/> must be granted.
         /// If it's false, at least one of the <see cref="Permissions"/> must be granted.
         /// </param>
-        /// <param name="features">The features.</param>
-        public SimplePermissionDependency(bool requiresAll, params string[] features)
-            : this(features)
+        /// <param name="permissions">The permissions.</param>
+        public SimplePermissionDependency(bool requiresAll, params string[] permissions)
+            : this(permissions)
         {
             RequiresAll = requiresAll;
         }
@@ -46,8 +46,8 @@ namespace Abp.Authorization
         /// <inheritdoc/>
         public Task<bool> IsSatisfiedAsync(IPermissionDependencyContext context)
         {
-            return context.UserId.HasValue
-                ? context.PermissionChecker.IsGrantedAsync(context.UserId.Value, RequiresAll, Permissions)
+            return context.User != null
+                ? context.PermissionChecker.IsGrantedAsync(context.User, RequiresAll, Permissions)
                 : context.PermissionChecker.IsGrantedAsync(RequiresAll, Permissions);
         }
     }

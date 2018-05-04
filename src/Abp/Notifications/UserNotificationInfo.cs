@@ -12,8 +12,13 @@ namespace Abp.Notifications
     /// </summary>
     [Serializable]
     [Table("AbpUserNotifications")]
-    public class UserNotificationInfo : Entity<Guid>, IHasCreationTime
+    public class UserNotificationInfo : Entity<Guid>, IHasCreationTime, IMayHaveTenant
     {
+        /// <summary>
+        /// Tenant Id.
+        /// </summary>
+        public virtual int? TenantId { get; set; }
+
         /// <summary>
         /// User Id.
         /// </summary>
@@ -23,7 +28,7 @@ namespace Abp.Notifications
         /// Notification Id.
         /// </summary>
         [Required]
-        public virtual Guid NotificationId { get; set; }
+        public virtual Guid TenantNotificationId { get; set; }
 
         /// <summary>
         /// Current state of the user notification.
@@ -32,23 +37,20 @@ namespace Abp.Notifications
 
         public virtual DateTime CreationTime { get; set; }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="UserNotificationInfo"/> class.
-        /// </summary>
         public UserNotificationInfo()
         {
-            State = UserNotificationState.Unread;
-            CreationTime = Clock.Now;
+            
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UserNotificationInfo"/> class.
         /// </summary>
-        public UserNotificationInfo(long userId, Guid notificationId)
-            : this()
+        /// <param name="create"></param>
+        public UserNotificationInfo(Guid id)
         {
-            UserId = userId;
-            NotificationId = notificationId;
+            Id = id;
+            State = UserNotificationState.Unread;
+            CreationTime = Clock.Now;
         }
     }
 }

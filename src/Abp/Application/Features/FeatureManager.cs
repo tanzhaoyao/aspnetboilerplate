@@ -13,22 +13,37 @@ namespace Abp.Application.Features
         private readonly IIocManager _iocManager;
         private readonly IFeatureConfiguration _featureConfiguration;
 
+        /// <summary>
+        /// Creates a new <see cref="FeatureManager"/> object
+        /// </summary>
+        /// <param name="iocManager">IOC Manager</param>
+        /// <param name="featureConfiguration">Feature configuration</param>
         public FeatureManager(IIocManager iocManager, IFeatureConfiguration featureConfiguration)
         {
             _iocManager = iocManager;
             _featureConfiguration = featureConfiguration;
         }
 
+        /// <summary>
+        /// Initializes this <see cref="FeatureManager"/>
+        /// </summary>
         public void Initialize()
         {
             foreach (var providerType in _featureConfiguration.Providers)
             {
-                CreateProvider(providerType).SetFeatures(this);
+                using (var provider = CreateProvider(providerType))
+                {
+                    provider.Object.SetFeatures(this);
+                }
             }
 
             Features.AddAllFeatures();
         }
 
+        /// <summary>
+        /// Gets a feature by its given name
+        /// </summary>
+        /// <param name="name">Name of the feature</param>
         public Feature Get(string name)
         {
             var feature = GetOrNull(name);
@@ -40,15 +55,17 @@ namespace Abp.Application.Features
             return feature;
         }
 
+        /// <summary>
+        /// Gets all the features
+        /// </summary>
         public IReadOnlyList<Feature> GetAll()
         {
             return Features.Values.ToImmutableList();
         }
 
-        private FeatureProvider CreateProvider(Type providerType)
+        private IDisposableDependencyObjectWrapper<FeatureProvider> CreateProvider(Type providerType)
         {
-            _iocManager.RegisterIfNot(providerType);
-            return (FeatureProvider)_iocManager.Resolve(providerType);
+            return _iocManager.ResolveAsDisposable<FeatureProvider>(providerType);
         }
     }
 }

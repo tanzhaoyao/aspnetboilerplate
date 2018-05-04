@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Abp.BackgroundJobs;
 using Abp.Collections.Extensions;
@@ -16,10 +17,12 @@ namespace Abp.Notifications
     /// </summary>
     public class NotificationPublisher : AbpServiceBase, INotificationPublisher, ITransientDependency
     {
+        public const int MaxUserCountToDirectlyDistributeANotification = 5;
+
         /// <summary>
         /// Indicates all tenants.
         /// </summary>
-        public int[] AllTenants
+        public static int[] AllTenants
         {
             get
             {
@@ -35,6 +38,7 @@ namespace Abp.Notifications
         private readonly INotificationStore _store;
         private readonly IBackgroundJobManager _backgroundJobManager;
         private readonly INotificationDistributer _notificationDistributer;
+        private readonly IGuidGenerator _guidGenerator;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="NotificationPublisher"/> class.
@@ -42,11 +46,13 @@ namespace Abp.Notifications
         public NotificationPublisher(
             INotificationStore store,
             IBackgroundJobManager backgroundJobManager,
-            INotificationDistributer notificationDistributer)
+            INotificationDistributer notificationDistributer,
+            IGuidGenerator guidGenerator)
         {
             _store = store;
             _backgroundJobManager = backgroundJobManager;
             _notificationDistributer = notificationDistributer;
+            _guidGenerator = guidGenerator;
             AbpSession = NullAbpSession.Instance;
         }
 
@@ -57,8 +63,8 @@ namespace Abp.Notifications
             NotificationData data = null,
             EntityIdentifier entityIdentifier = null,
             NotificationSeverity severity = NotificationSeverity.Info,
-            long[] userIds = null,
-            long[] excludedUserIds = null,
+            UserIdentifier[] userIds = null,
+            UserIdentifier[] excludedUserIds = null,
             int?[] tenantIds = null)
         {
             if (notificationName.IsNullOrEmpty())
@@ -68,7 +74,7 @@ namespace Abp.Notifications
 
             if (!tenantIds.IsNullOrEmpty() && !userIds.IsNullOrEmpty())
             {
-                throw new ArgumentException("tenantIds can be set only userIds is not set!", "tenantIds");
+                throw new ArgumentException("tenantIds can be set only if userIds is not set!", "tenantIds");
             }
 
             if (tenantIds.IsNullOrEmpty() && userIds.IsNullOrEmpty())
@@ -76,15 +82,15 @@ namespace Abp.Notifications
                 tenantIds = new[] {AbpSession.TenantId};
             }
 
-            var notificationInfo = new NotificationInfo
+            var notificationInfo = new NotificationInfo(_guidGenerator.Create())
             {
                 NotificationName = notificationName,
                 EntityTypeName = entityIdentifier == null ? null : entityIdentifier.Type.FullName,
                 EntityTypeAssemblyQualifiedName = entityIdentifier == null ? null : entityIdentifier.Type.AssemblyQualifiedName,
                 EntityId = entityIdentifier == null ? null : entityIdentifier.Id.ToJsonString(),
                 Severity = severity,
-                UserIds = userIds.IsNullOrEmpty() ? null : userIds.JoinAsString(","),
-                ExcludedUserIds = excludedUserIds.IsNullOrEmpty() ? null : excludedUserIds.JoinAsString(","),
+                UserIds = userIds.IsNullOrEmpty() ? null : userIds.Select(uid => uid.ToUserIdentifierString()).JoinAsString(","),
+                ExcludedUserIds = excludedUserIds.IsNullOrEmpty() ? null : excludedUserIds.Select(uid => uid.ToUserIdentifierString()).JoinAsString(","),
                 TenantIds = tenantIds.IsNullOrEmpty() ? null : tenantIds.JoinAsString(","),
                 Data = data == null ? null : data.ToJsonString(),
                 DataTypeName = data == null ? null : data.GetType().AssemblyQualifiedName
@@ -94,7 +100,7 @@ namespace Abp.Notifications
 
             await CurrentUnitOfWork.SaveChangesAsync(); //To get Id of the notification
 
-            if (userIds != null && userIds.Length <= 5)
+            if (userIds != null && userIds.Length <= MaxUserCountToDirectlyDistributeANotification)
             {
                 //We can directly distribute the notification since there are not much receivers
                 await _notificationDistributer.DistributeAsync(notificationInfo.Id);

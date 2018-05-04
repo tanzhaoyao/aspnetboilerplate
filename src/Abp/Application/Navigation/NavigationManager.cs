@@ -24,7 +24,7 @@ namespace Abp.Application.Navigation
 
             Menus = new Dictionary<string, MenuDefinition>
                     {
-                        {"MainMenu", new MenuDefinition("MainMenu", new FixedLocalizableString("Main menu"))} //TODO: Localization for "Main menu"
+                        {"MainMenu", new MenuDefinition("MainMenu", new LocalizableString("MainMenu", AbpConsts.LocalizationSourceName))}
                     };
         }
 
@@ -34,8 +34,10 @@ namespace Abp.Application.Navigation
 
             foreach (var providerType in _configuration.Providers)
             {
-                var provider = (NavigationProvider)_iocResolver.Resolve(providerType);
-                provider.SetNavigation(context);
+                using (var provider = _iocResolver.ResolveAsDisposable<NavigationProvider>(providerType))
+                {
+                    provider.Object.SetNavigation(context);
+                }
             }
         }
     }

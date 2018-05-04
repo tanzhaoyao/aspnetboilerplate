@@ -1,36 +1,30 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Abp.Auditing;
 using Abp.Dependency;
 using Abp.RealTime;
 using Abp.Runtime.Session;
 using Castle.Core.Logging;
-using Microsoft.AspNet.SignalR;
 
 namespace Abp.Web.SignalR.Hubs
 {
     /// <summary>
     /// Common Hub of ABP.
     /// </summary>
-    public class AbpCommonHub : Hub, ITransientDependency
+    public class AbpCommonHub : AbpHubBase, ITransientDependency
     {
-        /// <summary>
-        /// Reference to the logger.
-        /// </summary>
-        public ILogger Logger { get; set; }
-
-        /// <summary>
-        /// Reference to the session.
-        /// </summary>
-        public IAbpSession AbpSession { get; set; }
-
         private readonly IOnlineClientManager _onlineClientManager;
+        private readonly IClientInfoProvider _clientInfoProvider;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AbpCommonHub"/> class.
         /// </summary>
-        public AbpCommonHub(IOnlineClientManager onlineClientManager)
+        public AbpCommonHub(
+            IOnlineClientManager onlineClientManager, 
+            IClientInfoProvider clientInfoProvider)
         {
             _onlineClientManager = onlineClientManager;
+            _clientInfoProvider = clientInfoProvider;
 
             Logger = NullLogger.Instance;
             AbpSession = NullAbpSession.Instance;
@@ -41,23 +35,35 @@ namespace Abp.Web.SignalR.Hubs
             Logger.Debug("A client is registered: " + Context.ConnectionId);
         }
 
-        public async override Task OnConnected()
+        public override async Task OnConnected()
         {
             await base.OnConnected();
 
-            var client = new OnlineClient(
-                Context.ConnectionId,
-                GetIpAddressOfClient(),
-                AbpSession.TenantId,
-                AbpSession.UserId
-                );
+            var client = CreateClientForCurrentConnection();
 
             Logger.Debug("A client is connected: " + client);
             
             _onlineClientManager.Add(client);
         }
 
-        public async override Task OnDisconnected(bool stopCalled)
+        public override async Task OnReconnected()
+        {
+            await base.OnReconnected();
+
+            var client = _onlineClientManager.GetByConnectionIdOrNull(Context.ConnectionId);
+            if (client == null)
+            {
+                client = CreateClientForCurrentConnection();
+                _onlineClientManager.Add(client);
+                Logger.Debug("A client is connected (on reconnected event): " + client);
+            }
+            else
+            {
+                Logger.Debug("A client is reconnected: " + client);
+            }
+        }
+
+        public override async Task OnDisconnected(bool stopCalled)
         {
             await base.OnDisconnected(stopCalled);
 
@@ -73,11 +79,21 @@ namespace Abp.Web.SignalR.Hubs
             }
         }
 
-        private string GetIpAddressOfClient()
+        private IOnlineClient CreateClientForCurrentConnection()
+        {
+            return new OnlineClient(
+                Context.ConnectionId,
+                GetIpAddressOfClient(),
+                AbpSession.TenantId,
+                AbpSession.UserId
+            );
+        }
+
+        protected virtual string GetIpAddressOfClient()
         {
             try
             {
-                return Context.Request.Environment["server.RemoteIpAddress"].ToString();
+                return _clientInfoProvider.ClientIpAddress;
             }
             catch (Exception ex)
             {

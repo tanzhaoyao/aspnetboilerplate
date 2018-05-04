@@ -37,6 +37,8 @@ namespace Abp.Runtime.Caching
         
         public virtual ICache GetCache(string name)
         {
+            Check.NotNull(name, nameof(name));
+
             return Caches.GetOrAdd(name, (cacheName) =>
             {
                 var cache = CreateCacheImplementation(cacheName);
@@ -45,10 +47,7 @@ namespace Abp.Runtime.Caching
 
                 foreach (var configurator in configurators)
                 {
-                    if (configurator.InitAction != null)
-                    {
-                        configurator.InitAction(cache);
-                    }
+                    configurator.InitAction?.Invoke(cache);
                 }
 
                 return cache;
@@ -57,12 +56,16 @@ namespace Abp.Runtime.Caching
 
         public virtual void Dispose()
         {
+            DisposeCaches();
+            Caches.Clear();
+        }
+
+        protected virtual void DisposeCaches()
+        {
             foreach (var cache in Caches)
             {
                 IocManager.Release(cache.Value);
             }
-
-            Caches.Clear();
         }
 
         /// <summary>
